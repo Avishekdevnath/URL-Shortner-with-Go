@@ -2,27 +2,23 @@ package handlers
 
 import (
 	"net/http"
-
 	"github.com/gin-gonic/gin"
-	"github.com/Avishekdevnath/URL-Shortner-with-Go/Backend/internal/models"
-	"github.com/Avishekdevnath/URL-Shortner-with-Go/Backend/internal/store/memory"
+	"Backend/internal/models"
+	"Backend/internal/service"  // Local import for the service layer
 )
 
-// Initialize memory store
-var store = memory.New()
-
 // ShortenURL handles POST requests to shorten URLs.
-func ShortenURL(c *gin.Context) {
+func ShortenURL(c *gin.Context, urlService *service.URLService) {
 	var request models.ShortURLRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid input"})
 		return
 	}
 
-	// Save the URL and get the short code
-	response, err := store.Save(&request)
+	// Call the service to shorten the URL
+	response, err := urlService.ShortenURL(&request)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Error saving URL"})
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -30,11 +26,11 @@ func ShortenURL(c *gin.Context) {
 }
 
 // RedirectURL handles GET requests to redirect to the original URL.
-func RedirectURL(c *gin.Context) {
+func RedirectURL(c *gin.Context, urlService *service.URLService) {
 	shortCode := c.Param("code")
 
-	// Get the original URL for the short code
-	response, err := store.Get(shortCode)
+	// Call the service to retrieve the original URL
+	response, err := urlService.GetOriginalURL(shortCode)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "URL not found"})
 		return

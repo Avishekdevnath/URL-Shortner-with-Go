@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/Avishekdevnath/URL-Shortner-with-Go/Backend/internal/models"
-	"github.com/Avishekdevnath/URL-Shortner-with-Go/Backend/internal/store"
+	"Backend/internal/models" // Local import for models
+	// "Backend/internal/store"  // Local import for store interface
 )
 
 // MemoryStore is an in-memory implementation of the Store interface.

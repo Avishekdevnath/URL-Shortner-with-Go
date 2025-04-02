@@ -1,6 +1,6 @@
 package store
 
-import "github.com/Avishekdevnath/URL-Shortner-with-Go/Backend/internal/models"
+import "Backend/internal/models"
 
 // Store interface for managing URLs.
 type Store interface {
