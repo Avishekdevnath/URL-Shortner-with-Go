@@ -1,0 +1,107 @@
+basePath: /
+definitions:
+  models.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  models.ShortURLRequest:
+    properties:
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  models.ShortURLResponse:
+    properties:
+      original_url:
+        description: Added OriginalURL field
+        type: string
+      short_url:
+        type: string
+    type: object
+  models.URLListResponse:
+    properties:
+      original_url:
+        type: string
+      short_code:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: A simple URL shortening service built with Go and Gin.
+  title: URL Shortener API
+  version: "1.0"
+paths:
+  /{code}:
+    get:
+      description: Redirects to the original URL based on the short code
+      parameters:
+      - description: Short URL code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "301":
+          description: Redirects to the original URL
+        "404":
+          description: URL not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Redirect to original URL
+      tags:
+      - URL
+  /api/shorten:
+    post:
+      consumes:
+      - application/json
+      description: Takes a long URL and returns a shortened version
+      parameters:
+      - description: URL to shorten
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ShortURLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Shortened URL
+          schema:
+            $ref: '#/definitions/models.ShortURLResponse'
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Shorten a URL
+      tags:
+      - URL
+  /urls:
+    get:
+      description: Returns a list of all shortened URLs with their original URLs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of shortened URLs
+          schema:
+            items:
+              $ref: '#/definitions/models.URLListResponse'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: List all shortened URLs
+      tags:
+      - URL
+swagger: "2.0"

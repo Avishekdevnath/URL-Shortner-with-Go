@@ -1,3 +1,4 @@
+// S:\SDE\Hard Core\Learn\Golang\Projects\URL-Shortner-with-Go\Backend\internal\api\router\router.go
 package router
 
 import (
@@ -7,20 +8,21 @@ import (
 	"Backend/internal/service"       // Local import for service layer
 )
 
-// SetupRouter sets up the Gin routes and handlers. Now accepts urlService.
-func SetupRouter(urlService *service.URLService) *gin.Engine {
-	router := gin.Default()
-
+// SetupRouter sets up the Gin routes and handlers. Now includes /urls to view all URLs.
+func SetupRouter(router *gin.Engine, urlService *service.URLService) {
 	// Use the logging middleware
 	router.Use(middleware.Logger())
+	// Use the CORS middleware
+	router.Use(middleware.CORS())
 
 	// Define the routes and pass urlService to handlers
-	router.POST("/shorten", func(c *gin.Context) {
+	router.POST("/api/shorten", func(c *gin.Context) {
 		handlers.ShortenURL(c, urlService)    // Pass urlService to ShortenURL
 	})
-	router.GET("/short/:code", func(c *gin.Context) {
+	router.GET("/:code", func(c *gin.Context) {
 		handlers.RedirectURL(c, urlService) // Pass urlService to RedirectURL
 	})
-
-	return router
+	router.GET("/urls", func(c *gin.Context) {
+		handlers.GetAllURLs(c, urlService)  // Pass urlService to GetAllURLs
+	})
 }

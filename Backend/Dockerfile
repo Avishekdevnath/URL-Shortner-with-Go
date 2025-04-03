@@ -1,11 +1,11 @@
 # Stage 1: Build the Go application
-FROM golang:1.21 AS builder
+FROM golang:1.23-alpine AS builder  
 
 WORKDIR /app
 
-# Copy go.mod and download dependencies
-COPY go.mod ./
-RUN go mod download
+# Copy go.mod and go.sum to download dependencies
+COPY go.mod go.sum ./
+RUN go mod tidy
 
 # Copy the rest of the source code
 COPY . .
