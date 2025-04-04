@@ -1,10 +1,12 @@
+// S:\SDE\Hard Core\Learn\Golang\Projects\URL-Shortner-with-Go\Backend\internal\api\handlers\handlers.go
+
 package handlers
 
 import (
 	"Backend/internal/models"
-	"Backend/internal/service" // Local import for the service layer
+	"Backend/internal/service"
 	"fmt"
-	"log" // For logging the shortened URL
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,9 +37,7 @@ func ShortenURL(c *gin.Context, urlService *service.URLService) {
 		return
 	}
 
-	// Log the shortened URL to the console
-	log.Printf("Shortened URL: %s", response.ShortURL) // This will print the shortened URL in the console
-
+	log.Printf("Shortened URL: %s", response.ShortURL)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -53,18 +53,15 @@ func ShortenURL(c *gin.Context, urlService *service.URLService) {
 func RedirectURL(c *gin.Context, urlService *service.URLService) {
 	shortCode := c.Param("code")
 
-	// Call the service to retrieve the original URL
 	response, err := urlService.GetOriginalURL(shortCode)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "URL not found"})
 		return
 	}
 
-	// Add CORS headers to allow browser requests
-	c.Header("Access-Control-Allow-Origin", "*") // Allow all origins for testing
+	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Allow-Methods", "GET")
-
-	fmt.Println("line 44", response.OriginalURL)
+	fmt.Println("Redirecting to", response.OriginalURL)
 	c.Redirect(http.StatusMovedPermanently, response.OriginalURL)
 }
 
@@ -73,26 +70,16 @@ func RedirectURL(c *gin.Context, urlService *service.URLService) {
 // @Description Returns a list of all shortened URLs with their original URLs
 // @Tags URL
 // @Produce json
-// @Success 200 {array} models.URLListResponse "List of shortened URLs"
+// @Success 200 {array} models.URL "List of shortened URLs with metadata"
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /urls [get]
 func GetAllURLs(c *gin.Context, urlService *service.URLService) {
-	// Fetch all URLs from the service layer
 	allURLs, err := urlService.GetAllURLs()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	// Prepare the response
-	var response []models.URLListResponse
-	for shortCode, originalURL := range allURLs {
-		response = append(response, models.URLListResponse{
-			ShortCode:   shortCode,
-			OriginalURL: originalURL,
-		})
-	}
-
-	// Return the list of URLs in the response
-	c.JSON(http.StatusOK, response)
+	// Return the full URL structs (includes UserID and CreatedAt)
+	c.JSON(http.StatusOK, allURLs)
 }

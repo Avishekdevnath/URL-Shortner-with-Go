@@ -1,28 +1,36 @@
-# Stage 1: Build the Go application
-FROM golang:1.23-alpine AS builder  
+# Step 1: Build the Go application
+FROM golang:1.18 AS builder
 
 WORKDIR /app
 
-# Copy go.mod and go.sum to download dependencies
+# Copy the Go module files
 COPY go.mod go.sum ./
-RUN go mod tidy
 
-# Copy the rest of the source code
+# Install dependencies
+RUN go mod download
+
+# Copy the entire source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o url-shortener ./cmd/server/main.go
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux go build -o url-shortener .
 
-# Stage 2: Create a lightweight runtime image
+# Step 2: Create the final runtime image
 FROM alpine:latest
 
-WORKDIR /app
+WORKDIR /root/
 
-# Copy the binary from the builder stage
+# Install necessary packages
+RUN apk --no-cache add ca-certificates
+
+# Copy the Go binary from the builder stage
 COPY --from=builder /app/url-shortener .
 
-# Expose the port the app will run on
+# Install Postgres client and Redis CLI
+RUN apk add --no-cache postgresql-client redis
+
+# Expose the server port
 EXPOSE 8080
 
-# Run the binary
+# Command to run the app
 CMD ["./url-shortener"]

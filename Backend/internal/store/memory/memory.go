@@ -7,20 +7,19 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-
-	"Backend/internal/models" // Local import for models
+	"Backend/internal/models"
 )
 
-// MemoryStore is an in-memory implementation of the Store interface.
 type MemoryStore struct {
 	mu    sync.RWMutex
-	store map[string]string
+	store []models.URL
+	users []models.User
 }
 
-// New creates a new in-memory store.
 func New() *MemoryStore {
 	return &MemoryStore{
-		store: make(map[string]string),
+		store: make([]models.URL, 0),
+		users: make([]models.User, 0),
 	}
 }
 
@@ -35,41 +34,46 @@ func GenerateRandomString(length int) string {
 	return string(result)
 }
 
-// Save stores the original URL and returns a shortened URL.
 func (m *MemoryStore) Save(url *models.ShortURLRequest) (*models.ShortURLResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	// Generate a completely random short code
-	shortCode := GenerateRandomString(6) // Generate a 6-character random string
-	fmt.Println("Short code", shortCode)
-	m.store[shortCode] = url.URL
-
+	shortCode := GenerateRandomString(6)
+	newURL := models.URL{
+		ShortCode:   shortCode,
+		OriginalURL: url.URL,
+		CreatedAt:   time.Now().Unix(),
+		UserID:      nil,
+	}
+	m.store = append(m.store, newURL)
 	return &models.ShortURLResponse{ShortURL: shortCode, OriginalURL: url.URL}, nil
 }
 
-// Get retrieves the original URL for the given short code.
 func (m *MemoryStore) Get(shortCode string) (*models.ShortURLResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	originalURL, exists := m.store[shortCode]
-	if !exists {
-		return nil, errors.New("short URL not found")
+	for _, url := range m.store {
+		if url.ShortCode == shortCode {
+			return &models.ShortURLResponse{ShortURL: "http://localhost:8080/" + shortCode, OriginalURL: url.OriginalURL}, nil
+		}
 	}
-
-	return &models.ShortURLResponse{ShortURL: "http://localhost:8080/" + shortCode, OriginalURL: originalURL}, nil
+	return nil, errors.New("short URL not found")
 }
 
-// GetAll retrieves all stored URLs as a map of short codes to original URLs.
-func (m *MemoryStore) GetAll() (map[string]string, error) {
+func (m *MemoryStore) GetAll() ([]models.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	// Return a copy of the store to avoid external modification
-	result := make(map[string]string)
-	for shortCode, originalURL := range m.store {
-		result[shortCode] = originalURL
+	result := make([]models.URL, len(m.store))
+	copy(result, m.store)
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].CreatedAt < result[j].CreatedAt {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
 	}
 	return result, nil
+}
+
+func (m *MemoryStore) Health() error {
+	return nil // In-memory, always healthy
 }

@@ -1,23 +1,23 @@
 // S:\SDE\Hard Core\Learn\Golang\Projects\URL-Shortner-with-Go\Backend\internal\store\redis\redis.go
+
 package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"Backend/internal/models" // Local import for models
-	"Backend/internal/store"  // Local import for store interface
 	"math/rand"
 	"time"
+	"Backend/internal/models"
+	"Backend/config"
+	"github.com/go-redis/redis/v8"
 )
 
-// RedisStore represents a Redis-based store.
 type RedisStore struct {
 	client *redis.Client
 }
 
-// GenerateRandomString generates a random string of a specified length
 func GenerateRandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	seed := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -28,43 +28,57 @@ func GenerateRandomString(length int) string {
 	return string(result)
 }
 
-// New creates a new RedisStore and connects to the Redis server.
-func New(addr, password string, db int) (*RedisStore, error) {
-	// Initialize a Redis client
+// New initializes the Redis store with the URL from config.
+func New() (*RedisStore, error) {
+	cfg, err := config.LoadConfig()  // Load the configuration
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %v", err)
+	}
+
 	client := redis.NewClient(&redis.Options{
-		Addr:     addr,     // Redis server address (e.g., "localhost:6379")
-		Password: password, // Redis password (default is no password)
-		DB:       db,       // Database number
+		Addr:     cfg.RedisURL,  // Use Redis URL from config
+		Password: "",             // Use empty password if not needed
+		DB:       0,              // Use default DB (0)
 	})
 
-	// Test the connection to Redis
-	_, err := client.Ping(context.Background()).Result()
+	_, err = client.Ping(context.Background()).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %v", err)
 	}
-
 	return &RedisStore{client: client}, nil
 }
 
-// Save stores the original URL and returns a shortened URL in Redis.
+// Save stores the URL in Redis cache.
 func (r *RedisStore) Save(url *models.ShortURLRequest) (*models.ShortURLResponse, error) {
-	// Generate a random short code
 	shortCode := GenerateRandomString(6)
-
-	// Store the original URL in Redis with the short code as the key
-	err := r.client.Set(context.Background(), shortCode, url.URL, 0).Err()
-	if err != nil {
-		return nil, fmt.Errorf("failed to save URL in Redis: %v", err)
+	createdAt := time.Now().Unix()
+	newURL := models.URL{
+		ShortCode:   shortCode,
+		OriginalURL: url.URL,
+		CreatedAt:   createdAt,
 	}
 
-	// Return the shortened URL response with full URL
-	return &models.ShortURLResponse{ShortURL: "http://localhost:8080/" + shortCode, OriginalURL: url.URL}, nil
+	data, err := json.Marshal(newURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal URL: %v", err)
+	}
+	ctx := context.Background()
+	// Store the shortened URL in Redis
+	if err := r.client.Set(ctx, shortCode, data, 0).Err(); err != nil {
+		return nil, fmt.Errorf("failed to save URL in Redis: %v", err)
+	}
+	// Add to ZSET for ordered retrieval based on creation time
+	if err := r.client.ZAdd(ctx, "urls", &redis.Z{Score: float64(createdAt), Member: shortCode}).Err(); err != nil {
+		return nil, fmt.Errorf("failed to add to ZSET: %v", err)
+	}
+
+	return &models.ShortURLResponse{ShortURL: shortCode, OriginalURL: url.URL}, nil
 }
 
-// Get retrieves the original URL for a given short code from Redis.
+// Get retrieves the URL from Redis.
 func (r *RedisStore) Get(shortCode string) (*models.ShortURLResponse, error) {
-	// Get the original URL from Redis using the short code
-	originalURL, err := r.client.Get(context.Background(), shortCode).Result()
+	ctx := context.Background()
+	data, err := r.client.Get(ctx, shortCode).Result()
 	if err == redis.Nil {
 		return nil, errors.New("short URL not found in Redis")
 	}
@@ -72,44 +86,44 @@ func (r *RedisStore) Get(shortCode string) (*models.ShortURLResponse, error) {
 		return nil, fmt.Errorf("failed to retrieve URL from Redis: %v", err)
 	}
 
-	// Return the original URL in the response with full URL
-	return &models.ShortURLResponse{ShortURL: "http://localhost:8080/" + shortCode, OriginalURL: originalURL}, nil
-}
-
-// GetAll retrieves all stored short URLs from Redis.
-func (r *RedisStore) GetAll() (map[string]string, error) {
-	ctx := context.Background()
-	result := make(map[string]string)
-
-	// Use SCAN to iterate over all keys in Redis
-	var cursor uint64
-	for {
-		keys, nextCursor, err := r.client.Scan(ctx, cursor, "*", 10).Result()
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan keys in Redis: %v", err)
-		}
-
-		// Fetch values for the retrieved keys
-		for _, key := range keys {
-			value, err := r.client.Get(ctx, key).Result()
-			if err == redis.Nil {
-				continue // Skip keys with no associated value
-			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve value for key %s: %v", key, err)
-			}
-			result[key] = value
-		}
-
-		// Break if the cursor is 0 (end of iteration)
-		if nextCursor == 0 {
-			break
-		}
-		cursor = nextCursor
+	var url models.URL
+	if err := json.Unmarshal([]byte(data), &url); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal URL: %v", err)
 	}
 
-	return result, nil
+	return &models.ShortURLResponse{ShortURL: shortCode, OriginalURL: url.OriginalURL}, nil
 }
 
-// Ensure RedisStore implements the Store interface
-var _ store.Store = &RedisStore{}
+// GetAll retrieves all URLs from Redis.
+func (r *RedisStore) GetAll() ([]models.URL, error) {
+	ctx := context.Background()
+	shortCodes, err := r.client.ZRevRange(ctx, "urls", 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve URLs from ZSET: %v", err)
+	}
+
+	var urls []models.URL
+	for _, shortCode := range shortCodes {
+		data, err := r.client.Get(ctx, shortCode).Result()
+		if err == redis.Nil {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve URL %s: %v", shortCode, err)
+		}
+
+		var url models.URL
+		if err := json.Unmarshal([]byte(data), &url); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal URL %s: %v", shortCode, err)
+		}
+		urls = append(urls, url)
+	}
+
+	return urls, nil
+}
+
+// Health checks if Redis is responsive.
+func (r *RedisStore) Health() error {
+	_, err := r.client.Ping(context.Background()).Result()
+	return err
+}

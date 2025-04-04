@@ -1,0 +1,6 @@
+FROM postgres:13
+
+# Set environment variables (optional if needed)
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=1234
+ENV POSTGRES_DB=postgres
