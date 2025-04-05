@@ -1,6 +1,5 @@
-# S:\SDE\Hard Core\Learn\Golang\Projects\URL-Shortner-with-Go\Backend\Dockerfile
 # Step 1: Build the Go application
-FROM golang:1.18 AS builder
+FROM golang:1.21 AS builder
 
 WORKDIR /app
 
@@ -14,21 +13,18 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN CGO_ENABLED=0 GOOS=linux go build -o url-shortener .
+RUN CGO_ENABLED=0 GOOS=linux go build -o url-shortener ./cmd/server/main.go
 
 # Step 2: Create the final runtime image
 FROM alpine:latest
 
-WORKDIR /root/
+WORKDIR /app
 
-# Install necessary packages
+# Install necessary packages for HTTPS connections
 RUN apk --no-cache add ca-certificates
 
 # Copy the Go binary from the builder stage
 COPY --from=builder /app/url-shortener .
-
-# Install Postgres client and Redis CLI
-RUN apk add --no-cache postgresql-client redis
 
 # Expose the server port
 EXPOSE 8080
