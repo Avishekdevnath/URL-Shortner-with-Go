@@ -20,37 +20,10 @@ func New(dsn string) (*PostgresStore, error) {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	// Check if tables exist with explicit error handling
-	var urlTableExists, userTableExists int
-	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'urls'").Scan(&urlTableExists).Error; err != nil {
-		logrus.Errorf("Failed to check urls table existence: %v", err)
-		return nil, fmt.Errorf("failed to check urls table: %v", err)
-	}
-	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'").Scan(&userTableExists).Error; err != nil {
-		logrus.Errorf("Failed to check users table existence: %v", err)
-		return nil, fmt.Errorf("failed to check users table: %v", err)
-	}
+	// Log successful connection
+	logrus.Info("Connected to PostgreSQL successfully")
 
-	logrus.Infof("Table check: urlTableExists=%d, userTableExists=%d", urlTableExists, userTableExists)
-
-	// Only migrate if tables don’t exist
-	if urlTableExists == 0 {
-		logrus.Info("Creating urls table...")
-		if err := db.AutoMigrate(&models.URL{}); err != nil {
-			return nil, fmt.Errorf("failed to migrate URLs table: %v", err)
-		}
-	} else {
-		logrus.Info("urls table already exists, skipping migration")
-	}
-	if userTableExists == 0 {
-		logrus.Info("Creating users table...")
-		if err := db.AutoMigrate(&models.User{}); err != nil {
-			return nil, fmt.Errorf("failed to migrate Users table: %v", err)
-		}
-	} else {
-		logrus.Info("users table already exists, skipping migration")
-	}
-
+	// No table checks or migration - assume schema exists
 	return &PostgresStore{db: db}, nil
 }
 
