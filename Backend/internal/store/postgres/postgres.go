@@ -17,13 +17,23 @@ type PostgresStore struct {
 func New(dsn string) (*PostgresStore, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to PostgreSQL: %v", err)
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	// Auto migrate models
-	err = db.AutoMigrate(&models.URL{}, &models.User{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to migrate PostgreSQL: %v", err)
+	// Check if tables exist before migrating
+	var urlTableExists, userTableExists int
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'urls'").Scan(&urlTableExists)
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'users'").Scan(&userTableExists)
+
+	if urlTableExists == 0 {
+		if err := db.AutoMigrate(&models.URL{}); err != nil {
+			return nil, fmt.Errorf("failed to migrate URLs table: %v", err)
+		}
+	}
+	if userTableExists == 0 {
+		if err := db.AutoMigrate(&models.User{}); err != nil {
+			return nil, fmt.Errorf("failed to migrate Users table: %v", err)
+		}
 	}
 
 	return &PostgresStore{db: db}, nil
