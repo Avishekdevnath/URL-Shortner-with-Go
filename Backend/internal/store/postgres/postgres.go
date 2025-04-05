@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	"Backend/internal/models"
+	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -19,21 +20,35 @@ func New(dsn string) (*PostgresStore, error) {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	// Explicitly check the 'public' schema for tables
+	// Check if tables exist with explicit error handling
 	var urlTableExists, userTableExists int
-	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'urls'").Scan(&urlTableExists)
-	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'").Scan(&userTableExists)
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'urls'").Scan(&urlTableExists).Error; err != nil {
+		logrus.Errorf("Failed to check urls table existence: %v", err)
+		return nil, fmt.Errorf("failed to check urls table: %v", err)
+	}
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'").Scan(&userTableExists).Error; err != nil {
+		logrus.Errorf("Failed to check users table existence: %v", err)
+		return nil, fmt.Errorf("failed to check users table: %v", err)
+	}
+
+	logrus.Infof("Table check: urlTableExists=%d, userTableExists=%d", urlTableExists, userTableExists)
 
 	// Only migrate if tables don’t exist
 	if urlTableExists == 0 {
+		logrus.Info("Creating urls table...")
 		if err := db.AutoMigrate(&models.URL{}); err != nil {
 			return nil, fmt.Errorf("failed to migrate URLs table: %v", err)
 		}
+	} else {
+		logrus.Info("urls table already exists, skipping migration")
 	}
 	if userTableExists == 0 {
+		logrus.Info("Creating users table...")
 		if err := db.AutoMigrate(&models.User{}); err != nil {
 			return nil, fmt.Errorf("failed to migrate Users table: %v", err)
 		}
+	} else {
+		logrus.Info("users table already exists, skipping migration")
 	}
 
 	return &PostgresStore{db: db}, nil
