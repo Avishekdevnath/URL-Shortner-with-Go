@@ -13,18 +13,18 @@ type PostgresStore struct {
 	db *gorm.DB
 }
 
-// New initializes the PostgreSQL store.
 func New(dsn string) (*PostgresStore, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	// Check if tables exist before migrating
+	// Explicitly check the 'public' schema for tables
 	var urlTableExists, userTableExists int
-	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'urls'").Scan(&urlTableExists)
-	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'users'").Scan(&userTableExists)
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'urls'").Scan(&urlTableExists)
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'").Scan(&userTableExists)
 
+	// Only migrate if tables don’t exist
 	if urlTableExists == 0 {
 		if err := db.AutoMigrate(&models.URL{}); err != nil {
 			return nil, fmt.Errorf("failed to migrate URLs table: %v", err)
@@ -75,6 +75,5 @@ func (p *PostgresStore) GetAll() ([]models.URL, error) {
 
 // Health checks if PostgreSQL is responsive.
 func (p *PostgresStore) Health() error {
-	err := p.db.Raw("SELECT 1").Error
-	return err
+	return p.db.Raw("SELECT 1").Error
 }
